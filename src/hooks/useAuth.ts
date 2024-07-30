@@ -1,6 +1,6 @@
-import { getApiBaseUrl, setApiBaseUrl } from "@/constants/authBaseUrl";
 import axios, { AxiosResponse } from "axios";
 import { useCallback, useState } from "react";
+import { getApiBaseUrl, setApiBaseUrl } from "../constants/authBaseUrl";
 import {
   AccessTokenResponse,
   ForgotPasswordRequest,
