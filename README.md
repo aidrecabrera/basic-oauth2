@@ -1,5 +1,7 @@
 # @svene/basic-oauth2
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 I created this for my personal use for my side project, but feel free to use it if it fits your needs. It is a simple hook for handling OAuth2 authentication with the default .NET Identity EntityFrameworkCoree endpoints. It provides a simple interface to interact with automatically generated API endpoints for authentication and user management.
 
 Not really that good, but it works for me.
