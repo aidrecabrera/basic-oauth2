@@ -13,35 +13,69 @@ import {
 } from "../types/authInterfaces";
 
 /**
- * Handles token storage based on the environment.
+ * !NOTE: Currently experimenting whether to use cookies or local storage.
  */
-const tokenStorage = {
-  getItem: (key: string) => {
-    if (typeof window !== "undefined") {
-      return localStorage.getItem(key);
-    }
+
+/**
+ * Helper functions to manage cookies
+ */
+const cookieHelper = {
+  getCookie: (name: string) => {
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) return parts.pop()?.split(";").shift();
     return null;
   },
-  setItem: (key: string, value: string) => {
-    if (typeof window !== "undefined") {
-      localStorage.setItem(key, value);
-    }
+  setCookie: (name: string, value: string, days: number) => {
+    const expires = new Date(Date.now() + days * 864e5).toUTCString();
+    document.cookie = `${name}=${value}; expires=${expires}; path=/; secure; HttpOnly; SameSite=Strict`;
   },
-  removeItem: (key: string) => {
-    if (typeof window !== "undefined") {
-      localStorage.removeItem(key);
-    }
+  deleteCookie: (name: string) => {
+    document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; secure; HttpOnly; SameSite=Strict`;
   },
 };
+
+/**
+ * Axios instance with base URL and interceptors for token management.
+ */
+const apiClient = axios.create({
+  baseURL: getApiBaseUrl(),
+});
+
+apiClient.interceptors.request.use(
+  (config) => {
+    const accessToken = cookieHelper.getCookie("accessToken");
+    if (accessToken) {
+      config.headers.Authorization = `Bearer ${accessToken}`;
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
+apiClient.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const originalRequest = error.config;
+    if (error.response.status === 401 && !originalRequest._retry) {
+      originalRequest._retry = true;
+      await AuthClient.refresh();
+      const accessToken = cookieHelper.getCookie("accessToken");
+      originalRequest.headers.Authorization = `Bearer ${accessToken}`;
+      return apiClient(originalRequest);
+    }
+    return Promise.reject(error);
+  }
+);
 
 /**
  * AuthClient class to handle authentication and authorization.
  */
 class AuthClient {
-  private static accessToken: string | null =
-    tokenStorage.getItem("accessToken");
-  private static refreshToken: string | null =
-    tokenStorage.getItem("refreshToken");
+  private static accessToken: string | null | undefined =
+    cookieHelper.getCookie("accessToken");
+  private static refreshToken: string | null | undefined =
+    cookieHelper.getCookie("refreshToken");
 
   /**
    * Handles the response from authentication requests.
@@ -51,8 +85,12 @@ class AuthClient {
     AuthClient.accessToken = response.data.accessToken || null;
     AuthClient.refreshToken = response.data.refreshToken || null;
 
-    tokenStorage.setItem("accessToken", AuthClient.accessToken || "");
-    tokenStorage.setItem("refreshToken", AuthClient.refreshToken || "");
+    cookieHelper.setCookie(
+      "accessToken",
+      AuthClient.accessToken || "",
+      response.data.expiresIn / 86400
+    );
+    cookieHelper.setCookie("refreshToken", AuthClient.refreshToken || "", 7); // Set refresh token for 7 days
   }
 
   /**
@@ -62,8 +100,8 @@ class AuthClient {
    */
   public static async register(data: RegisterRequest): Promise<void> {
     try {
-      const response = await axios.post<AccessTokenResponse>(
-        `${getApiBaseUrl()}/register`,
+      const response = await apiClient.post<AccessTokenResponse>(
+        "/register",
         data
       );
       AuthClient.handleResponse(response);
@@ -79,8 +117,8 @@ class AuthClient {
    */
   public static async login(data: LoginRequest): Promise<void> {
     try {
-      const response = await axios.post<AccessTokenResponse>(
-        `${getApiBaseUrl()}/login`,
+      const response = await apiClient.post<AccessTokenResponse>(
+        "/login",
         data
       );
       AuthClient.handleResponse(response);
@@ -95,12 +133,9 @@ class AuthClient {
    */
   public static async refresh(): Promise<void> {
     try {
-      const response = await axios.post<AccessTokenResponse>(
-        `${getApiBaseUrl()}/refresh`,
-        {
-          refreshToken: AuthClient.refreshToken,
-        }
-      );
+      const response = await apiClient.post<AccessTokenResponse>("/refresh", {
+        refreshToken: AuthClient.refreshToken,
+      });
       AuthClient.handleResponse(response);
     } catch (error) {
       console.error("An error occurred during token refresh", error);
@@ -116,7 +151,7 @@ class AuthClient {
     data: ResendConfirmationEmailRequest
   ): Promise<void> {
     try {
-      await axios.post(`${getApiBaseUrl()}/resendConfirmationEmail`, data);
+      await apiClient.post("/resendConfirmationEmail", data);
     } catch (error) {
       console.error(
         "An error occurred during resending confirmation email",
@@ -134,7 +169,7 @@ class AuthClient {
     data: ForgotPasswordRequest
   ): Promise<void> {
     try {
-      await axios.post(`${getApiBaseUrl()}/forgotPassword`, data);
+      await apiClient.post("/forgotPassword", data);
     } catch (error) {
       console.error("An error occurred during forgot password", error);
     }
@@ -147,7 +182,7 @@ class AuthClient {
    */
   public static async resetPassword(data: ResetPasswordRequest): Promise<void> {
     try {
-      await axios.post(`${getApiBaseUrl()}/resetPassword`, data);
+      await apiClient.post("/resetPassword", data);
     } catch (error) {
       console.error("An error occurred during reset password", error);
     }
@@ -160,11 +195,7 @@ class AuthClient {
    */
   public static async manageTwoFactor(data: TwoFactorRequest): Promise<any> {
     try {
-      const response = await axios.post(`${getApiBaseUrl()}/manage/2fa`, data, {
-        headers: {
-          Authorization: `Bearer ${AuthClient.accessToken}`,
-        },
-      });
+      const response = await apiClient.post("/manage/2fa", data);
       return response.data;
     } catch (error) {
       console.error(
@@ -180,14 +211,7 @@ class AuthClient {
    */
   public static async getInfo(): Promise<InfoResponse> {
     try {
-      const response = await axios.get<InfoResponse>(
-        `${getApiBaseUrl()}/manage/info`,
-        {
-          headers: {
-            Authorization: `Bearer ${AuthClient.accessToken}`,
-          },
-        }
-      );
+      const response = await apiClient.get<InfoResponse>("/manage/info");
       return response.data;
     } catch (error) {
       console.error("An error occurred during fetching user info", error);
@@ -202,15 +226,7 @@ class AuthClient {
    */
   public static async updateInfo(data: InfoRequest): Promise<InfoResponse> {
     try {
-      const response = await axios.post<InfoResponse>(
-        `${getApiBaseUrl()}/manage/info`,
-        data,
-        {
-          headers: {
-            Authorization: `Bearer ${AuthClient.accessToken}`,
-          },
-        }
-      );
+      const response = await apiClient.post<InfoResponse>("/manage/info", data);
       return response.data;
     } catch (error) {
       console.error("An error occurred during updating user info", error);
@@ -224,8 +240,8 @@ class AuthClient {
   public static logout() {
     AuthClient.accessToken = null;
     AuthClient.refreshToken = null;
-    tokenStorage.removeItem("accessToken");
-    tokenStorage.removeItem("refreshToken");
+    cookieHelper.deleteCookie("accessToken");
+    cookieHelper.deleteCookie("refreshToken");
   }
 
   /**
@@ -233,7 +249,7 @@ class AuthClient {
    * @returns {string | null} - The current access token.
    */
   public static getAccessToken(): string | null {
-    return AuthClient.accessToken;
+    return AuthClient.accessToken || null;
   }
 }
 
