@@ -42,26 +42,59 @@ Object.defineProperty(exports, "__esModule", { value: true });
 var axios_1 = __importDefault(require("axios"));
 var authBaseUrl_1 = require("../constants/authBaseUrl");
 /**
- * Handles token storage based on the environment.
+ * !NOTE: Currently experimenting whether to use cookies or local storage.
  */
-var tokenStorage = {
-    getItem: function (key) {
-        if (typeof window !== "undefined") {
-            return localStorage.getItem(key);
-        }
+/**
+ * Helper functions to manage cookies
+ */
+var cookieHelper = {
+    getCookie: function (name) {
+        var _a;
+        var value = "; ".concat(document.cookie);
+        var parts = value.split("; ".concat(name, "="));
+        if (parts.length === 2)
+            return (_a = parts.pop()) === null || _a === void 0 ? void 0 : _a.split(";").shift();
         return null;
     },
-    setItem: function (key, value) {
-        if (typeof window !== "undefined") {
-            localStorage.setItem(key, value);
-        }
+    setCookie: function (name, value, days) {
+        var expires = new Date(Date.now() + days * 864e5).toUTCString();
+        document.cookie = "".concat(name, "=").concat(value, "; expires=").concat(expires, "; path=/; secure; HttpOnly; SameSite=Strict");
     },
-    removeItem: function (key) {
-        if (typeof window !== "undefined") {
-            localStorage.removeItem(key);
-        }
+    deleteCookie: function (name) {
+        document.cookie = "".concat(name, "=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; secure; HttpOnly; SameSite=Strict");
     },
 };
+/**
+ * Axios instance with base URL and interceptors for token management.
+ */
+var apiClient = axios_1.default.create({
+    baseURL: (0, authBaseUrl_1.getApiBaseUrl)(),
+});
+apiClient.interceptors.request.use(function (config) {
+    var accessToken = cookieHelper.getCookie("accessToken");
+    if (accessToken) {
+        config.headers.Authorization = "Bearer ".concat(accessToken);
+    }
+    return config;
+}, function (error) { return Promise.reject(error); });
+apiClient.interceptors.response.use(function (response) { return response; }, function (error) { return __awaiter(void 0, void 0, void 0, function () {
+    var originalRequest, accessToken;
+    return __generator(this, function (_a) {
+        switch (_a.label) {
+            case 0:
+                originalRequest = error.config;
+                if (!(error.response.status === 401 && !originalRequest._retry)) return [3 /*break*/, 2];
+                originalRequest._retry = true;
+                return [4 /*yield*/, AuthClient.refresh()];
+            case 1:
+                _a.sent();
+                accessToken = cookieHelper.getCookie("accessToken");
+                originalRequest.headers.Authorization = "Bearer ".concat(accessToken);
+                return [2 /*return*/, apiClient(originalRequest)];
+            case 2: return [2 /*return*/, Promise.reject(error)];
+        }
+    });
+}); });
 /**
  * AuthClient class to handle authentication and authorization.
  */
@@ -75,8 +108,8 @@ var AuthClient = /** @class */ (function () {
     AuthClient.handleResponse = function (response) {
         AuthClient.accessToken = response.data.accessToken || null;
         AuthClient.refreshToken = response.data.refreshToken || null;
-        tokenStorage.setItem("accessToken", AuthClient.accessToken || "");
-        tokenStorage.setItem("refreshToken", AuthClient.refreshToken || "");
+        cookieHelper.setCookie("accessToken", AuthClient.accessToken || "", response.data.expiresIn / 86400);
+        cookieHelper.setCookie("refreshToken", AuthClient.refreshToken || "", 7); // Set refresh token for 7 days
     };
     /**
      * Registers a new user using the automatically generated API endpoint.
@@ -90,7 +123,7 @@ var AuthClient = /** @class */ (function () {
                 switch (_a.label) {
                     case 0:
                         _a.trys.push([0, 2, , 3]);
-                        return [4 /*yield*/, axios_1.default.post("".concat((0, authBaseUrl_1.getApiBaseUrl)(), "/register"), data)];
+                        return [4 /*yield*/, apiClient.post("/register", data)];
                     case 1:
                         response = _a.sent();
                         AuthClient.handleResponse(response);
@@ -116,7 +149,7 @@ var AuthClient = /** @class */ (function () {
                 switch (_a.label) {
                     case 0:
                         _a.trys.push([0, 2, , 3]);
-                        return [4 /*yield*/, axios_1.default.post("".concat((0, authBaseUrl_1.getApiBaseUrl)(), "/login"), data)];
+                        return [4 /*yield*/, apiClient.post("/login", data)];
                     case 1:
                         response = _a.sent();
                         AuthClient.handleResponse(response);
@@ -141,7 +174,7 @@ var AuthClient = /** @class */ (function () {
                 switch (_a.label) {
                     case 0:
                         _a.trys.push([0, 2, , 3]);
-                        return [4 /*yield*/, axios_1.default.post("".concat((0, authBaseUrl_1.getApiBaseUrl)(), "/refresh"), {
+                        return [4 /*yield*/, apiClient.post("/refresh", {
                                 refreshToken: AuthClient.refreshToken,
                             })];
                     case 1:
@@ -169,7 +202,7 @@ var AuthClient = /** @class */ (function () {
                 switch (_a.label) {
                     case 0:
                         _a.trys.push([0, 2, , 3]);
-                        return [4 /*yield*/, axios_1.default.post("".concat((0, authBaseUrl_1.getApiBaseUrl)(), "/resendConfirmationEmail"), data)];
+                        return [4 /*yield*/, apiClient.post("/resendConfirmationEmail", data)];
                     case 1:
                         _a.sent();
                         return [3 /*break*/, 3];
@@ -194,7 +227,7 @@ var AuthClient = /** @class */ (function () {
                 switch (_a.label) {
                     case 0:
                         _a.trys.push([0, 2, , 3]);
-                        return [4 /*yield*/, axios_1.default.post("".concat((0, authBaseUrl_1.getApiBaseUrl)(), "/forgotPassword"), data)];
+                        return [4 /*yield*/, apiClient.post("/forgotPassword", data)];
                     case 1:
                         _a.sent();
                         return [3 /*break*/, 3];
@@ -219,7 +252,7 @@ var AuthClient = /** @class */ (function () {
                 switch (_a.label) {
                     case 0:
                         _a.trys.push([0, 2, , 3]);
-                        return [4 /*yield*/, axios_1.default.post("".concat((0, authBaseUrl_1.getApiBaseUrl)(), "/resetPassword"), data)];
+                        return [4 /*yield*/, apiClient.post("/resetPassword", data)];
                     case 1:
                         _a.sent();
                         return [3 /*break*/, 3];
@@ -244,11 +277,7 @@ var AuthClient = /** @class */ (function () {
                 switch (_a.label) {
                     case 0:
                         _a.trys.push([0, 2, , 3]);
-                        return [4 /*yield*/, axios_1.default.post("".concat((0, authBaseUrl_1.getApiBaseUrl)(), "/manage/2fa"), data, {
-                                headers: {
-                                    Authorization: "Bearer ".concat(AuthClient.accessToken),
-                                },
-                            })];
+                        return [4 /*yield*/, apiClient.post("/manage/2fa", data)];
                     case 1:
                         response = _a.sent();
                         return [2 /*return*/, response.data];
@@ -272,11 +301,7 @@ var AuthClient = /** @class */ (function () {
                 switch (_a.label) {
                     case 0:
                         _a.trys.push([0, 2, , 3]);
-                        return [4 /*yield*/, axios_1.default.get("".concat((0, authBaseUrl_1.getApiBaseUrl)(), "/manage/info"), {
-                                headers: {
-                                    Authorization: "Bearer ".concat(AuthClient.accessToken),
-                                },
-                            })];
+                        return [4 /*yield*/, apiClient.get("/manage/info")];
                     case 1:
                         response = _a.sent();
                         return [2 /*return*/, response.data];
@@ -301,11 +326,7 @@ var AuthClient = /** @class */ (function () {
                 switch (_a.label) {
                     case 0:
                         _a.trys.push([0, 2, , 3]);
-                        return [4 /*yield*/, axios_1.default.post("".concat((0, authBaseUrl_1.getApiBaseUrl)(), "/manage/info"), data, {
-                                headers: {
-                                    Authorization: "Bearer ".concat(AuthClient.accessToken),
-                                },
-                            })];
+                        return [4 /*yield*/, apiClient.post("/manage/info", data)];
                     case 1:
                         response = _a.sent();
                         return [2 /*return*/, response.data];
@@ -324,18 +345,18 @@ var AuthClient = /** @class */ (function () {
     AuthClient.logout = function () {
         AuthClient.accessToken = null;
         AuthClient.refreshToken = null;
-        tokenStorage.removeItem("accessToken");
-        tokenStorage.removeItem("refreshToken");
+        cookieHelper.deleteCookie("accessToken");
+        cookieHelper.deleteCookie("refreshToken");
     };
     /**
      * Gets the current access token.
      * @returns {string | null} - The current access token.
      */
     AuthClient.getAccessToken = function () {
-        return AuthClient.accessToken;
+        return AuthClient.accessToken || null;
     };
-    AuthClient.accessToken = tokenStorage.getItem("accessToken");
-    AuthClient.refreshToken = tokenStorage.getItem("refreshToken");
+    AuthClient.accessToken = cookieHelper.getCookie("accessToken");
+    AuthClient.refreshToken = cookieHelper.getCookie("refreshToken");
     return AuthClient;
 }());
 exports.default = AuthClient;
