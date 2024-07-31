@@ -17,7 +17,9 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.useAuth = exports.setApiBaseUrl = exports.getApiBaseUrl = void 0;
+exports.useAuth = exports.setApiBaseUrl = exports.getApiBaseUrl = exports.AuthClient = void 0;
+var client_auth_1 = require("./client/client-auth");
+Object.defineProperty(exports, "AuthClient", { enumerable: true, get: function () { return __importDefault(client_auth_1).default; } });
 var authBaseUrl_1 = require("./constants/authBaseUrl");
 Object.defineProperty(exports, "getApiBaseUrl", { enumerable: true, get: function () { return authBaseUrl_1.getApiBaseUrl; } });
 Object.defineProperty(exports, "setApiBaseUrl", { enumerable: true, get: function () { return authBaseUrl_1.setApiBaseUrl; } });

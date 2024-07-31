@@ -39,9 +39,9 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-var authBaseUrl_1 = require("@/constants/authBaseUrl");
 var axios_1 = __importDefault(require("axios"));
 var react_1 = require("react");
+var authBaseUrl_1 = require("../constants/authBaseUrl");
 /**
  * Custom hook for handling authentication and authorization using Microsoft.AspNetCore.Identity.EntityFrameworkCore.
  * @returns {object} - the necessary objects for authentication and authorization.
